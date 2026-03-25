@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complex Roots Visualiser</title>
+<style>
+  :root {
+    --bg:#0a0a0f; --surface:#12121a; --border:#1e1e2e;
+    --accent:#7c6af7; --accent3:#6af7c2;
+    --text:#e8e8f0; --muted:#6e6e8a; --error:#f76a6a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:2rem 1rem;
+    background-image:radial-gradient(ellipse at 20% 20%,rgba(124,106,247,.06) 0%,transparent 60%),
+                     radial-gradient(ellipse at 80% 80%,rgba(106,247,194,.04) 0%,transparent 60%);
+  }
+  header{text-align:center;margin-bottom:2.5rem;}
+  header h1{
+    font-family:'Instrument Serif',serif;font-size:clamp(1.8rem,4vw,2.8rem);
+    font-weight:400;font-style:italic;letter-spacing:-.02em;
+    background:linear-gradient(135deg,var(--accent) 0%,var(--accent3) 100%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  }
+  header p{color:var(--muted);font-size:.75rem;margin-top:.4rem;letter-spacing:.08em;text-transform:uppercase;}
+  .container{display:grid;grid-template-columns:340px 1fr;gap:1.5rem;width:100%;max-width:1080px;}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;overflow-y:auto;max-height:660px;}
+  .tabs{display:flex;gap:.5rem;margin-bottom:1.5rem;}
+  .tab{
+    flex:1;padding:.5rem;background:transparent;border:1px solid var(--border);
+    border-radius:6px;color:var(--muted);font-family:'JetBrains Mono',monospace;
+    font-size:.7rem;cursor:pointer;transition:all .2s;letter-spacing:.05em;
+  }
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .tab:hover:not(.active){border-color:var(--accent);color:var(--accent);}
+  .section{display:none;} .section.active{display:block;}
+  label{display:block;font-size:.7rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.4rem;margin-top:1rem;}
+  label:first-of-type{margin-top:0;}
+  input{
+    width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    color:var(--text);font-family:'JetBrains Mono',monospace;font-size:.85rem;
+    padding:.6rem .8rem;outline:none;transition:border-color .2s;
+  }
+  input:focus{border-color:var(--accent);}
+  .hint{font-size:.65rem;color:var(--muted);margin-top:.3rem;}
+  button.solve{
+    width:100%;margin-top:1.5rem;padding:.75rem;background:var(--accent);
+    border:none;border-radius:6px;color:#fff;font-family:'JetBrains Mono',monospace;
+    font-size:.8rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;
+    cursor:pointer;transition:opacity .2s,transform .1s;
+  }
+  button.solve:hover{opacity:.85;} button.solve:active{transform:scale(.98);}
+  .roots-list{margin-top:1.2rem;display:flex;flex-direction:column;gap:.5rem;}
+
+  /* conjugate pair card */
+  .pair-card{
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:.7rem .9rem;animation:fadeIn .3s ease forwards;opacity:0;
+  }
+  .pair-card.has-pair{border-left-width:3px;}
+  .pair-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.45rem;}
+  .pair-badge{
+    font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;
+    padding:.15rem .45rem;border-radius:99px;border:1px solid;margin-left:auto;
+  }
+  .root-entry{margin-bottom:.35rem;}
+  .root-entry:last-child{margin-bottom:0;}
+  .re-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.2rem;}
+  .re-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .re-dot.hollow{background:transparent !important;border-width:2px;border-style:solid;}
+  .re-label{font-weight:500;font-size:.74rem;}
+  .re-rows{display:flex;flex-direction:column;gap:.15rem;padding-left:1.35rem;}
+  .re-row{display:flex;justify-content:space-between;gap:.4rem;}
+  .rk{color:var(--muted);font-size:.63rem;flex-shrink:0;}
+  .rv{color:var(--text);font-size:.66rem;text-align:right;}
+  .conj-line{
+    border:none;border-top:1px dashed var(--border);margin:.4rem 0;
+  }
+
+  @keyframes fadeIn{to{opacity:1;transform:translateY(0);}from{opacity:0;transform:translateY(4px);}}
+  .error-msg{
+    color:var(--error);font-size:.72rem;margin-top:.75rem;padding:.5rem .75rem;
+    background:rgba(247,106,106,.08);border-radius:6px;border:1px solid rgba(247,106,106,.2);display:none;
+  }
+  .canvas-wrap{
+    position:relative;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:560px;
+  }
+  canvas{display:block;cursor:crosshair;}
+  .zoom-controls{position:absolute;top:1rem;right:1rem;display:flex;flex-direction:column;gap:.3rem;}
+  .zoom-btn{
+    width:30px;height:30px;background:var(--surface);border:1px solid var(--border);
+    border-radius:6px;color:var(--text);font-size:1rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:border-color .2s;user-select:none;
+  }
+  .zoom-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .canvas-hint{position:absolute;bottom:.75rem;left:50%;transform:translateX(-50%);font-size:.62rem;color:var(--muted);white-space:nowrap;}
+  .tooltip{
+    position:absolute;background:#0e0e18;border:1px solid var(--border);
+    border-radius:8px;padding:.6rem .85rem;font-size:.68rem;
+    pointer-events:none;display:none;z-index:10;min-width:200px;line-height:1.8;
+  }
+  .tt-title{font-weight:500;font-size:.75rem;margin-bottom:.3rem;border-bottom:1px solid var(--border);padding-bottom:.3rem;}
+  .tt-row{display:flex;justify-content:space-between;gap:.5rem;}
+  .tt-k{color:var(--muted);} .tt-v{color:var(--text);}
+  .tt-conj-badge{font-size:.6rem;padding:.1rem .4rem;border-radius:99px;margin-left:.4rem;}
+  @media(max-width:720px){.container{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Complex Roots Visualiser</h1>
+  <p>Argand Diagram · De Moivre's Theorem</p>
+</header>
+<div class="container">
+  <div class="panel">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('unity')">Roots of Unity</button>
+      <button class="tab" onclick="switchTab('demoivre')">De Moivre</button>
+    </div>
+    <div class="section active" id="unity">
+      <label>Degree n</label>
+      <input type="number" id="unity-n" value="6" min="1" max="24"/>
+      <p class="hint">Solves z^n = 1</p>
+      <button class="solve" onclick="solveUnity()">Plot Roots</button>
+    </div>
+    <div class="section" id="demoivre">
+      <label>LHS</label>
+      <input type="text" id="dm-lhs" value="z^3" placeholder="e.g. z^3"/>
+      <label>RHS</label>
+      <input type="text" id="dm-rhs" value="1+i" placeholder="e.g. 1+i, 2i, -3"/>
+      <p class="hint">Use i for √−1 and ^ for powers</p>
+      <button class="solve" onclick="solveDemoivre()">Solve & Plot</button>
+    </div>
+    <div class="error-msg" id="error-msg"></div>
+    <div class="roots-list" id="roots-list"></div>
+  </div>
+  <div class="canvas-wrap" id="cwrap">
+    <canvas id="argand" width="680" height="580"></canvas>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoom(1.25)">+</button>
+      <button class="zoom-btn" onclick="zoom(0.8)">−</button>
+      <button class="zoom-btn" onclick="resetView()" title="Reset">↺</button>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="canvas-hint">Scroll to zoom · Hover to inspect</div>
+  </div>
+</div>
+<script>
+// ── Palette: each pair shares one color, +Im=solid, -Im=hollow ──
+const PAIR_PALETTE = ['#7c6af7','#f7a26a','#6af7c2','#f76a9a','#6ab4f7','#f7e26a','#c26af7','#6af79a'];
+
+const canvas = document.getElementById('argand');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
+let currentRoots = [];
+let rootMeta = [];   // [{color, hollow, pairIdx, conjIdx}]
+let viewScale = 120;
+let circleRadius = 1; // actual modulus of roots for the guide circle
+
+// ── Color assignment ──
+function assignColors(roots) {
+  rootMeta = roots.map(()=>({color:'#fff', hollow:false, pairIdx:0, conjIdx:-1}));
+  const used = new Array(roots.length).fill(false);
+  let pc = 0;
+  for (let i=0; i<roots.length; i++) {
+    if (used[i]) continue;
+    const r = roots[i], col = PAIR_PALETTE[pc % PAIR_PALETTE.length];
+    let cj = -1;
+    if (Math.abs(r.im) > 1e-9) {
+      for (let j=i+1; j<roots.length; j++) {
+        if (!used[j] && Math.abs(roots[j].re-r.re)<1e-6 && Math.abs(roots[j].im+r.im)<1e-6) { cj=j; break; }
+      }
+    }
+    if (cj !== -1) {
+      const posI = r.im > 0;
+      rootMeta[i]  = { color:col, hollow: !posI, pairIdx:pc, conjIdx:cj };
+      rootMeta[cj] = { color:col, hollow:  posI, pairIdx:pc, conjIdx:i  };
+      used[i] = used[cj] = true;
+    } else {
+      rootMeta[i] = { color:col, hollow:false, pairIdx:pc, conjIdx:-1 };
+      used[i] = true;
+    }
+    pc++;
+  }
+}
+
+// ── Tabs / errors ──
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0&&t==='unity')||(i===1&&t==='demoivre')));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById(t).classList.add('active');
+}
+function showError(m){const e=document.getElementById('error-msg');e.textContent=m;e.style.display='block';}
+function clearError(){document.getElementById('error-msg').style.display='none';}
+
+// ── Parse complex ──
+function parseComplex(str) {
+  str=str.trim().replace(/\s+/g,'');
+  if(str==='i'||str==='+i') return {re:0,im:1};
+  if(str==='-i') return {re:0,im:-1};
+  const fm=str.match(/^([+-]?[\d.]+)([+-])([\d.]*)i$/);
+  if(fm){const sign=fm[2]==='+'?1:-1,im=fm[3]===''?1:parseFloat(fm[3]);return{re:parseFloat(fm[1]),im:sign*im};}
+  const im2=str.match(/^([+-]?[\d.]*)i$/);
+  if(im2){const v=im2[1];return{re:0,im:v===''||v==='+'?1:v==='-'?-1:parseFloat(v)};}
+  const re2=str.match(/^([+-]?[\d.]+)$/);
+  if(re2) return{re:parseFloat(re2[1]),im:0};
+  return null;
+}
+
+function nthRootsOf(re,im,n){
+  const r=Math.sqrt(re*re+im*im),theta=Math.atan2(im,re),rootR=Math.pow(r,1/n);
+  return Array.from({length:n},(_,k)=>{const a=(theta+2*Math.PI*k)/n;return{re:rootR*Math.cos(a),im:rootR*Math.sin(a)};});
+}
+function parseDegree(s){const m=s.trim().match(/^[a-z]\^(\d+)$/i);return m?parseInt(m[1]):null;}
+
+// ── Format ──
+function f4(v){return parseFloat(v.toFixed(4));}
+function fmtRect(re,im){
+  const r=f4(re),i=f4(im);
+  if(r===0&&i===0) return '0';
+  if(r===0) return i===1?'i':i===-1?'−i':`${i}i`;
+  if(i===0) return `${r}`;
+  if(i===1) return `${r} + i`;
+  if(i===-1) return `${r} − i`;
+  return i>0?`${r} + ${i}i`:`${r} − ${Math.abs(i)}i`;
+}
+function fmtAngleFrac(rad){
+  const pi=Math.PI,frac=rad/pi;
+  for(const d of[1,2,3,4,6,8,12]){
+    const num=Math.round(frac*d);
+    if(Math.abs(frac-num/d)<1e-8){
+      if(num===0) return '0';
+      if(d===1) return num===1?'π':num===-1?'−π':`${num}π`;
+      if(num===1) return `π/${d}`;
+      if(num===-1) return `−π/${d}`;
+      return `${num}π/${d}`;
+    }
+  }
+  return `${parseFloat(rad.toFixed(4))} rad`;
+}
+function fmtArg(arg){
+  const deg=parseFloat((arg*180/Math.PI).toFixed(2));
+  return `${deg}° / ${fmtAngleFrac(arg)}`;
+}
+function fmtEuler(mod,arg){const m=f4(mod),a=fmtAngleFrac(arg);return m===1?`e^(i·${a})`:`${m}·e^(i·${a})`;}
+function fmtPolar(mod,arg){const m=f4(mod),a=fmtAngleFrac(arg);return m===1?`cis(${a})`:`${m}·cis(${a})`;}
+
+// ── Side panel ──
+function displayRoots(roots) {
+  const list=document.getElementById('roots-list');
+  list.innerHTML='';
+  // Group by pair
+  const pairMap={};
+  roots.forEach((r,i)=>{
+    const p=rootMeta[i].pairIdx;
+    if(!pairMap[p]) pairMap[p]=[];
+    pairMap[p].push(i);
+  });
+
+  let delay=0;
+  Object.values(pairMap).forEach(indices=>{
+    const hasPair = indices.length===2;
+    const card=document.createElement('div');
+    card.className='pair-card'+(hasPair?' has-pair':'');
+    card.style.animationDelay=`${delay*0.06}s`;
+    delay++;
+
+    const col=rootMeta[indices[0]].color;
+    if(hasPair) card.style.borderLeftColor=col;
+
+    let html='';
+    if(hasPair){
+      html+=`<div class="pair-header">
+        <span style="width:10px;height:10px;border-radius:50%;background:${col};display:inline-block"></span>
+        <span style="font-size:.68rem;color:${col};font-weight:500;">Conjugate Pair</span>
+        <span class="pair-badge" style="color:${col};border-color:${col}">z̄ = z*</span>
+      </div>`;
+    }
+
+    indices.forEach((i,idx)=>{
+      const r=roots[i];
+      const mod=Math.sqrt(r.re**2+r.im**2);
+      const arg=Math.atan2(r.im,r.re);
+      const meta=rootMeta[i];
+      const dotStyle=meta.hollow
+        ?`border:2px solid ${col};background:transparent;`
+        :`background:${col};`;
+
+      if(hasPair&&idx===1){
+        html+=`<hr class="conj-line">`;
+      }
+      html+=`
+        <div class="root-entry">
+          <div class="re-header">
+            <span class="re-dot" style="${dotStyle}"></span>
+            <span class="re-label" style="color:${col}">z<sub>${i+1}</sub> = ${fmtRect(r.re,r.im)}</span>
+            ${meta.hollow?`<span style="font-size:.6rem;color:var(--muted);margin-left:auto">conjugate</span>`:''}
+          </div>
+          <div class="re-rows">
+            <div class="re-row"><span class="rk">Modulus</span><span class="rv">${f4(mod)}</span></div>
+            <div class="re-row"><span class="rk">Arg</span><span class="rv">${fmtArg(arg)}</span></div>
+            <div class="re-row"><span class="rk">Euler</span><span class="rv">${fmtEuler(mod,arg)}</span></div>
+            <div class="re-row"><span class="rk">Polar</span><span class="rv">${fmtPolar(mod,arg)}</span></div>
+          </div>
+        </div>`;
+    });
+
+    card.innerHTML=html;
+    list.appendChild(card);
+  });
+}
+
+// ── Solve ──
+function solveUnity(){
+  clearError();
+  const n=parseInt(document.getElementById('unity-n').value);
+  if(isNaN(n)||n<1||n>24){showError('Enter an integer between 1 and 24.');return;}
+  currentRoots=nthRootsOf(1,0,n);
+  circleRadius=1;
+  assignColors(currentRoots);
+  resetView(); displayRoots(currentRoots);
+}
+function solveDemoivre(){
+  clearError();
+  const lhs=document.getElementById('dm-lhs').value;
+  const rhs=document.getElementById('dm-rhs').value;
+  const n=parseDegree(lhs);
+  if(!n){showError('LHS must be z^n e.g. z^3');return;}
+  const c=parseComplex(rhs);
+  if(!c){showError('Cannot parse RHS. Try: 1+2i, -3i, 4, i');return;}
+  currentRoots=nthRootsOf(c.re,c.im,n);
+  // circle radius = modulus of any root
+  circleRadius=currentRoots.length>0?Math.sqrt(currentRoots[0].re**2+currentRoots[0].im**2):1;
+  assignColors(currentRoots);
+  resetView(); displayRoots(currentRoots);
+}
+
+// ── View ──
+function resetView(){
+  let mx=1.4;
+  currentRoots.forEach(r=>{mx=Math.max(mx,Math.abs(r.re)*1.5,Math.abs(r.im)*1.5);});
+  viewScale=Math.min(cx,cy)*0.82/mx;
+  drawArgand();
+}
+function zoom(f){viewScale*=f;drawArgand();}
+document.getElementById('cwrap').addEventListener('wheel',e=>{
+  e.preventDefault();zoom(e.deltaY<0?1.1:1/1.1);
+},{passive:false});
+
+// ── Tooltip ──
+canvas.addEventListener('mousemove',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)*(W/rect.width);
+  const my=(e.clientY-rect.top)*(H/rect.height);
+  const tip=document.getElementById('tooltip');
+  let hit=null,minD=20;
+  currentRoots.forEach((r,i)=>{
+    const d=Math.hypot(mx-(cx+r.re*viewScale),my-(cy-r.im*viewScale));
+    if(d<minD){minD=d;hit={r,i};}
+  });
+  if(hit){
+    const {r,i}=hit;
+    const mod=Math.sqrt(r.re**2+r.im**2);
+    const arg=Math.atan2(r.im,r.re);
+    const meta=rootMeta[i];
+    const col=meta.color;
+    const conjNote=meta.conjIdx!==-1?`<span class="tt-conj-badge" style="background:${col}22;color:${col};border:1px solid ${col}44">${meta.hollow?'−Im':'+ Im'} · pair</span>`:'';
+    tip.style.display='block';
+    tip.style.left=Math.min(mx+16,W-210)+'px';
+    tip.style.top=Math.max(my-10,10)+'px';
+    tip.innerHTML=`
+      <div class="tt-title" style="color:${col}">z<sub>${i+1}</sub> = ${fmtRect(r.re,r.im)}${conjNote}</div>
+      <div class="tt-row"><span class="tt-k">Modulus</span><span class="tt-v">${f4(mod)}</span></div>
+      <div class="tt-row"><span class="tt-k">Arg</span><span class="tt-v">${fmtArg(arg)}</span></div>
+      <div class="tt-row"><span class="tt-k">Euler</span><span class="tt-v">${fmtEuler(mod,arg)}</span></div>
+      <div class="tt-row"><span class="tt-k">Polar</span><span class="tt-v">${fmtPolar(mod,arg)}</span></div>`;
+    canvas.style.cursor='pointer';
+  } else {
+    tip.style.display='none';
+    canvas.style.cursor='crosshair';
+  }
+});
+canvas.addEventListener('mouseleave',()=>{document.getElementById('tooltip').style.display='none';});
+
+// ── Draw ──
+function drawArgand(){
+  const s=viewScale;
+  ctx.clearRect(0,0,W,H);
+
+  // Grid
+  for(let x=((cx%s)+s)%s;x<W;x+=s){ctx.strokeStyle='#191928';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=((cy%s)+s)%s;y<H;y+=s){ctx.strokeStyle='#191928';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Guide circle — radius = actual modulus of roots (FIX)
+  const guideR = circleRadius * s;
+  ctx.beginPath();ctx.arc(cx,cy,guideR,0,Math.PI*2);
+  ctx.strokeStyle='rgba(124,106,247,0.18)';ctx.lineWidth=1;
+  ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);
+  // Label radius if not 1
+  if(Math.abs(circleRadius-1)>1e-6){
+    ctx.fillStyle='rgba(124,106,247,0.5)';ctx.font='10px JetBrains Mono';
+    ctx.textAlign='left';ctx.fillText(`r=${f4(circleRadius)}`,cx+guideR+4,cy-4);
+  }
+
+  // Axes
+  ctx.strokeStyle='#28284a';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,H);ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle='#44446a';ctx.font='12px JetBrains Mono';
+  ctx.textAlign='left';ctx.fillText('Re',W-24,cy-8);
+  ctx.textAlign='center';ctx.fillText('Im',cx+22,16);
+
+  // Ticks
+  ctx.fillStyle='#38385a';ctx.font='10px JetBrains Mono';
+  const mt=Math.ceil(Math.max(cx,cy)/s)+1;
+  for(let v=-mt;v<=mt;v++){
+    if(v===0) continue;
+    const px=cx+v*s,py=cy-v*s;
+    if(px>8&&px<W-8){ctx.strokeStyle='#38385a';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px,cy-3);ctx.lineTo(px,cy+3);ctx.stroke();ctx.textAlign='center';ctx.fillText(v,px,cy+14);}
+    if(py>8&&py<H-8){ctx.beginPath();ctx.moveTo(cx-3,py);ctx.lineTo(cx+3,py);ctx.stroke();ctx.textAlign='right';ctx.fillText(v+'i',cx-7,py+3);}
+  }
+
+  if(!currentRoots.length) return;
+
+  // Conjugate pair connector lines (dashed, between conjugate pairs)
+  const drawn=new Set();
+  currentRoots.forEach((r,i)=>{
+    const m=rootMeta[i];
+    if(m.conjIdx===-1||drawn.has(m.pairIdx)) return;
+    drawn.add(m.pairIdx);
+    const cj=currentRoots[m.conjIdx];
+    ctx.beginPath();
+    ctx.moveTo(cx+r.re*s,cy-r.im*s);
+    ctx.lineTo(cx+cj.re*s,cy-cj.im*s);
+    ctx.strokeStyle=m.color+'40';
+    ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
+  });
+
+  // Lines from origin
+  currentRoots.forEach((r,i)=>{
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+r.re*s,cy-r.im*s);
+    ctx.strokeStyle=rootMeta[i].color+'30';ctx.lineWidth=1;ctx.stroke();
+  });
+
+  // Polygon
+  ctx.beginPath();
+  currentRoots.forEach((r,i)=>{const px=cx+r.re*s,py=cy-r.im*s;i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);});
+  ctx.closePath();
+  ctx.strokeStyle='rgba(124,106,247,0.2)';ctx.lineWidth=1;ctx.stroke();
+  ctx.fillStyle='rgba(124,106,247,0.03)';ctx.fill();
+
+  // Points
+  currentRoots.forEach((r,i)=>{
+    const px=cx+r.re*s,py=cy-r.im*s;
+    const {color,hollow}=rootMeta[i];
+    // glow
+    const g=ctx.createRadialGradient(px,py,0,px,py,18);
+    g.addColorStop(0,color+'40');g.addColorStop(1,'transparent');
+    ctx.beginPath();ctx.arc(px,py,18,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    // dot — solid for +Im, hollow for -Im
+    ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);
+    if(hollow){
+      ctx.fillStyle='#0a0a0f';ctx.fill();
+      ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.stroke();
+    } else {
+      ctx.fillStyle=color;ctx.fill();
+      ctx.strokeStyle='#0a0a0f';ctx.lineWidth=2;ctx.stroke();
+    }
+    // label
+    const ang=Math.atan2(r.im,r.re);
+    const lx=px+Math.cos(ang)*20,ly=py-Math.sin(ang)*20;
+    ctx.fillStyle=color;ctx.font='500 11px JetBrains Mono';
+    ctx.textAlign=lx>cx?'left':'right';
+    ctx.fillText(`z${i+1}`,lx+(lx>cx?3:-3),ly);
+  });
+}
+
+drawArgand();
+</script>
+</body>
+</html>
